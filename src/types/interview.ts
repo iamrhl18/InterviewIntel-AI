@@ -89,7 +89,11 @@ export interface ResearchReport {
   hrQuestions: InterviewQuestion[]; // 8 questions
   recentDevelopments: RecentDevelopment[];
   prepTips: PrepTip[]; // 5 recommendations
-  suggestedQuestionsToAskInterviewer?: string[];
+  suggestedQuestionsToAskInterviewer?: {
+    question: string;
+    category?: string;
+    rationale?: string;
+  }[];
   confidenceRating: {
     score: number; // 0-100
     label: string;

@@ -955,10 +955,34 @@ export function generateFallbackReport(
       },
     ],
     suggestedQuestionsToAskInterviewer: [
-      `What are the most challenging technical bottlenecks the team is tackling this quarter?`,
-      `How does the team balance long-term architecture investments with rapid feature delivery?`,
-      `What does high performance look like for a ${params.jobRole} in their first 90 days here?`,
-      `How has ${companyName}'s engineering culture evolved as the product and customer base have scaled?`,
+      {
+        question:
+          "What are the most challenging technical bottlenecks the team is tackling this quarter?",
+        category: "Engineering",
+        rationale:
+          "Shows interest in the team's current technical challenges and engineering priorities.",
+      },
+      {
+        question:
+          "How does the team balance long-term architecture investments with rapid feature delivery?",
+        category: "Engineering",
+        rationale:
+          "Shows awareness of the trade-off between software architecture and business delivery speed.",
+      },
+      {
+        question:
+          `What does high performance look like for a ${params.jobRole} in their first 90 days here?`,
+        category: "Performance",
+        rationale:
+          "Helps understand expectations and what success looks like in the role.",
+      },
+      {
+        question:
+          `How has ${companyName}'s engineering culture evolved as the product and customer base have scaled?`,
+        category: "Culture",
+        rationale:
+          "Shows interest in engineering culture and how the organization has evolved.",
+      },
     ],
     confidenceRating,
   };
