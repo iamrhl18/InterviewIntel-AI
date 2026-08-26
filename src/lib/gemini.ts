@@ -324,11 +324,11 @@ function normalizeReport(
     suggestedQuestionsToAskInterviewer: Array.isArray(raw.suggestedQuestionsToAskInterviewer) && raw.suggestedQuestionsToAskInterviewer.length > 0
       ? raw.suggestedQuestionsToAskInterviewer
       : [
-          `What are the most challenging technical bottlenecks the team is tackling this quarter?`,
-          `How does the team balance long-term architecture investments with rapid feature delivery?`,
-          `What does high performance look like for a ${params.jobRole} in their first 90 days here?`,
-          `How has ${companyName}'s culture evolved as the product and customer base have scaled?`,
-        ],
+        `What are the most challenging technical bottlenecks the team is tackling this quarter?`,
+        `How does the team balance long-term architecture investments with rapid feature delivery?`,
+        `What does high performance look like for a ${params.jobRole} in their first 90 days here?`,
+        `How has ${companyName}'s culture evolved as the product and customer base have scaled?`,
+      ],
     confidenceRating,
     sourcesCited,
     fallbackReason: "NONE",
@@ -383,6 +383,7 @@ export function generateFallbackReport(
     inputUrl: params.companyUrl || `https://${domain}`,
     fallbackReason,
     fallbackMessage,
+    sourcesCited,
     companyOverview: {
       companyName,
       tagline: scrapedData?.description
@@ -611,8 +612,8 @@ export function generateFallbackReport(
         question: isFresher
           ? `Explain how you would design and implement a RESTful API endpoint for ${companyName}'s core entity with proper input validation and error handling.`
           : isExperienced
-          ? `Design a highly available, distributed rate-limiting and quota management service for ${companyName}'s public API ecosystem handling 100,000 requests/sec.`
-          : `How would you structure a modular service for ${companyName} to handle user actions while preventing race conditions and duplicate writes?`,
+            ? `Design a highly available, distributed rate-limiting and quota management service for ${companyName}'s public API ecosystem handling 100,000 requests/sec.`
+            : `How would you structure a modular service for ${companyName} to handle user actions while preventing race conditions and duplicate writes?`,
         category: "role",
         priority: "HIGH",
         priorityRationale: `Directly assesses core execution capability for ${role} at the ${level} tier.`,
@@ -631,8 +632,8 @@ export function generateFallbackReport(
         question: isFresher
           ? `How do database indexes work, and when would adding an index degrade system performance in an application like ${companyName}?`
           : isExperienced
-          ? `How would you architect database sharding and zero-downtime schema migrations for a high-write relational database at ${companyName}?`
-          : `Explain how you diagnose and optimize a slow database query in a production environment under active traffic.`,
+            ? `How would you architect database sharding and zero-downtime schema migrations for a high-write relational database at ${companyName}?`
+            : `Explain how you diagnose and optimize a slow database query in a production environment under active traffic.`,
         category: "role",
         priority: "HIGH",
         priorityRationale: "Database performance and data layer design are fundamental to role success.",
