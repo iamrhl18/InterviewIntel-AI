@@ -2,31 +2,21 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import {
-  Building2,
-  Briefcase,
-  Layers,
   Printer,
   Copy,
   Check,
   Search,
   Filter,
-  Flame,
-  CheckCircle2,
-  FileText,
-  HeartHandshake,
-  Newspaper,
-  BookOpen,
-  ShieldCheck,
   Play,
   ArrowRight,
   ArrowLeft,
   RotateCcw,
   Clock,
-  ChevronRight,
-  Eye,
-  EyeOff,
+  CheckCircle2,
+  Send,
+  Sparkles,
 } from "lucide-react";
-import { ResearchReport, QuestionPriority, QuestionCategory, InterviewQuestion } from "@/types/interview";
+import { ResearchReport, QuestionPriority, QuestionCategory } from "@/types/interview";
 import { formatDate } from "@/lib/utils";
 import { QuestionCard } from "./QuestionCard";
 import { SectionOverview } from "./SectionOverview";
@@ -65,8 +55,9 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
 
   // Mock Interview State
   const [mockIndex, setMockIndex] = useState(0);
+  const [mockCategory, setMockCategory] = useState<"ALL" | "company" | "role" | "hr">("company");
   const [mockNotes, setMockNotes] = useState<Record<string, string>>({});
-  const [showMockHints, setShowMockHints] = useState(false);
+  const [mockSubmitted, setMockSubmitted] = useState<Record<string, boolean>>({});
   const [mockTimerSeconds, setMockTimerSeconds] = useState(0);
   const [isTimerRunning, setIsTimerRunning] = useState(false);
 
@@ -78,6 +69,14 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
       ...report.hrQuestions,
     ];
   }, [report]);
+
+  // Questions for current mock section
+  const mockQuestionsList = useMemo(() => {
+    if (mockCategory === "company") return report.companyQuestions;
+    if (mockCategory === "role") return report.roleSpecificQuestions;
+    if (mockCategory === "hr") return report.hrQuestions;
+    return allQuestions;
+  }, [mockCategory, report, allQuestions]);
 
   // Load practiced IDs from localStorage for this report ID
   useEffect(() => {
@@ -185,7 +184,8 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const currentMockQuestion = allQuestions[mockIndex] || allQuestions[0];
+  const currentMockQuestion = mockQuestionsList[mockIndex] || mockQuestionsList[0];
+  const isCurrentMockSubmitted = Boolean(mockSubmitted[currentMockQuestion?.id]);
 
   const handleStartMockInterview = () => {
     setActiveTab("mock_interview");
@@ -194,32 +194,37 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
     mockEl?.scrollIntoView({ behavior: "smooth" });
   };
 
+  const handleSubmitAnswer = (questionId: string) => {
+    setMockSubmitted((prev) => ({ ...prev, [questionId]: true }));
+    togglePracticed(questionId);
+  };
+
   return (
-    <div className="w-full space-y-6">
+    <div className="w-full space-y-5">
       {/* Demo Mode Notice */}
       {isMockFallback && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 p-3.5 text-xs text-amber-800">
-          <span className="font-semibold">Notice:</span> Currently viewing offline reference intelligence for {report.companyName}. To enable live scraping for any custom company, set <code className="font-mono text-amber-900">GEMINI_API_KEY</code> in <code className="font-mono text-amber-900">.env.local</code>.
+        <div className="rounded border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800">
+          <span className="font-semibold">Notice:</span> Viewing built-in offline reference data for {report.companyName}. Add <code className="font-mono text-amber-900">GEMINI_API_KEY</code> in <code className="font-mono text-amber-900">.env.local</code> to enable real-time scraping for any company.
         </div>
       )}
 
       {/* Main Report Header Card */}
-      <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-xs">
+      <div className="rounded-lg border border-slate-300 bg-white p-5 sm:p-6 shadow-xs">
         <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
-          <div className="space-y-1.5">
-            <div className="flex flex-wrap items-center gap-2">
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-center gap-1.5">
               <span className="rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-semibold text-slate-800">
                 {report.companyName}
               </span>
-              <span className="rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-700">
+              <span className="rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs text-slate-700">
                 {report.targetRole}
               </span>
-              <span className="rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-800">
+              <span className="rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs text-blue-800 font-medium">
                 {report.experienceLevel}
               </span>
             </div>
 
-            <h1 className="text-xl font-semibold text-slate-900 sm:text-2xl">
+            <h1 className="text-lg font-semibold text-slate-900 sm:text-xl">
               Interview Intelligence Report
             </h1>
             <p className="text-xs text-slate-500">
@@ -227,23 +232,21 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
             </p>
           </div>
 
-          {/* Actions & Mock Interview CTA */}
-          <div className="flex flex-wrap items-center gap-2.5">
-            {/* Start Mock Interview CTA */}
+          {/* Action CTAs */}
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={handleStartMockInterview}
               type="button"
-              className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3.5 py-2 text-xs font-medium text-white shadow-xs transition hover:bg-blue-700"
+              className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3.5 py-1.5 text-xs font-medium text-white shadow-xs transition hover:bg-blue-700"
             >
               <Play className="h-3.5 w-3.5 fill-current" />
               <span>Start Mock Interview</span>
             </button>
 
-            {/* Copy Report */}
             <button
               onClick={handleCopyMarkdown}
               type="button"
-              className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 shadow-xs transition hover:bg-slate-50 hover:text-slate-900"
+              className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 shadow-xs transition hover:bg-slate-50 hover:text-slate-900"
             >
               {copied ? (
                 <>
@@ -258,11 +261,10 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
               )}
             </button>
 
-            {/* Print / PDF */}
             <button
               onClick={handlePrint}
               type="button"
-              className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 shadow-xs transition hover:bg-slate-50 hover:text-slate-900"
+              className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 shadow-xs transition hover:bg-slate-50 hover:text-slate-900"
             >
               <Printer className="h-3.5 w-3.5 text-slate-400" />
               <span>Print PDF</span>
@@ -270,51 +272,34 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
           </div>
         </div>
 
-        {/* Preparation Progress & Stats */}
-        <div className="mt-5 border-t border-slate-100 pt-5 space-y-4">
-          {/* Progress Indicator */}
-          <div className="rounded-md border border-slate-100 bg-slate-50/60 p-3">
-            <div className="flex items-center justify-between text-xs">
-              <span className="font-medium text-slate-700">
-                Preparation Progress ({practicedIds.size} of {allQuestions.length} completed)
-              </span>
-              <span className="font-semibold text-slate-900">{practicedPercentage}%</span>
-            </div>
-            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
-              <div
-                className="h-full rounded-full bg-blue-600 transition-all duration-300"
-                style={{ width: `${practicedPercentage}%` }}
-              />
-            </div>
-          </div>
-
-          {/* 4 Clean Metric Tiles */}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <div className="rounded-md border border-slate-200 bg-white p-3">
+        {/* Preparation Stats Row */}
+        <div className="mt-4 border-t border-slate-100 pt-4 space-y-3">
+          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+            <div className="rounded border border-slate-200 bg-slate-50/50 p-2.5">
               <span className="text-[11px] font-medium text-slate-500">Total Questions</span>
-              <div className="mt-0.5 text-lg font-semibold text-slate-900">
+              <div className="mt-0.5 text-base font-semibold text-slate-900">
                 {allQuestions.length}
               </div>
             </div>
 
-            <div className="rounded-md border border-slate-200 bg-white p-3">
+            <div className="rounded border border-slate-200 bg-slate-50/50 p-2.5">
               <span className="text-[11px] font-medium text-slate-500">High Priority</span>
-              <div className="mt-0.5 text-lg font-semibold text-red-600">
+              <div className="mt-0.5 text-base font-semibold text-red-600">
                 {highPriorityCount}
               </div>
             </div>
 
-            <div className="rounded-md border border-slate-200 bg-white p-3">
+            <div className="rounded border border-slate-200 bg-slate-50/50 p-2.5">
               <span className="text-[11px] font-medium text-slate-500">Key Insights</span>
-              <div className="mt-0.5 text-lg font-semibold text-slate-900">
+              <div className="mt-0.5 text-base font-semibold text-slate-900">
                 {report.whatYouShouldKnow.length}
               </div>
             </div>
 
-            <div className="rounded-md border border-slate-200 bg-white p-3">
-              <span className="text-[11px] font-medium text-slate-500">Grounding Score</span>
-              <div className="mt-0.5 text-lg font-semibold text-emerald-600">
-                {report.confidenceRating.score}%
+            <div className="rounded border border-slate-200 bg-slate-50/50 p-2.5">
+              <span className="text-[11px] font-medium text-slate-500">Verification</span>
+              <div className="mt-0.5 text-base font-semibold text-emerald-600">
+                {report.confidenceRating.score}% ({report.confidenceRating.label})
               </div>
             </div>
           </div>
@@ -326,7 +311,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
         <nav className="-mb-px flex space-x-1 overflow-x-auto" aria-label="Tabs">
           {[
             { key: "all_intel", label: "Full Report", count: null },
-            { key: "overview", label: "Overview & Insights", count: null },
+            { key: "overview", label: "Company Overview", count: null },
             {
               key: "priority_matrix",
               label: "Questions Matrix",
@@ -339,7 +324,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
             },
             {
               key: "role_questions",
-              label: "Role-Specific",
+              label: "Role Questions",
               count: report.roleSpecificQuestions.length,
             },
             {
@@ -364,7 +349,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
             },
             {
               key: "mock_interview",
-              label: "Mock Assessment Mode",
+              label: "Mock Assessment",
               count: null,
             },
           ].map((tab) => {
@@ -379,7 +364,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
                     setIsTimerRunning(true);
                   }
                 }}
-                className={`inline-flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2.5 text-xs font-medium transition-colors ${
+                className={`inline-flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2 text-xs font-medium transition-colors ${
                   isActive
                     ? "border-blue-600 text-blue-600 font-semibold"
                     : "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700"
@@ -388,7 +373,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
                 <span>{tab.label}</span>
                 {tab.count !== null && (
                   <span
-                    className={`rounded px-1.5 py-0.2 text-[10px] font-medium ${
+                    className={`rounded px-1.5 py-0.2 text-[10px] ${
                       isActive
                         ? "bg-blue-50 text-blue-700"
                         : "bg-slate-100 text-slate-600"
@@ -407,102 +392,126 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
       {activeTab === "mock_interview" && (
         <section id="mock-interview-section" className="space-y-4">
           {/* Assessment Header */}
-          <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-xs">
+          <div className="rounded-lg border border-slate-300 bg-white p-4 sm:p-5 shadow-xs">
             <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
               <div>
                 <div className="flex items-center gap-2">
                   <span className="rounded bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700">
-                    Live Assessment Session
+                    Mock Assessment
                   </span>
                   <span className="text-xs text-slate-500">
                     {report.companyName} • {report.targetRole}
                   </span>
                 </div>
-                <h3 className="mt-1 text-base font-semibold text-slate-900">
-                  Question {mockIndex + 1} of {allQuestions.length}
+                <h3 className="mt-1 text-sm font-semibold text-slate-900">
+                  Question {mockIndex + 1} of {mockQuestionsList.length}
                 </h3>
               </div>
 
-              {/* Timer & Controls */}
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 font-mono text-xs font-medium text-slate-700">
-                  <Clock className="h-3.5 w-3.5 text-slate-400" />
+              {/* Set selector & Timer */}
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex rounded border border-slate-200 bg-slate-50 p-0.5 text-xs">
+                  {(
+                    [
+                      { key: "company", label: "Company (10)" },
+                      { key: "role", label: "Role (10)" },
+                      { key: "hr", label: "HR (8)" },
+                    ] as const
+                  ).map((cat) => (
+                    <button
+                      key={cat.key}
+                      type="button"
+                      onClick={() => {
+                        setMockCategory(cat.key);
+                        setMockIndex(0);
+                      }}
+                      className={`rounded px-2 py-0.5 text-[11px] font-medium transition ${
+                        mockCategory === cat.key
+                          ? "bg-white text-slate-900 shadow-xs"
+                          : "text-slate-500 hover:text-slate-900"
+                      }`}
+                    >
+                      {cat.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-2.5 py-1 font-mono text-xs text-slate-700">
+                  <Clock className="h-3 w-3 text-slate-400" />
                   <span>{formatTimer(mockTimerSeconds)}</span>
                 </div>
 
                 <button
                   type="button"
                   onClick={() => setIsTimerRunning(!isTimerRunning)}
-                  className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                  className="rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
                 >
                   {isTimerRunning ? "Pause" : "Resume"}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setMockTimerSeconds(0)}
-                  className="rounded-md border border-slate-200 bg-white p-1.5 text-slate-400 hover:text-slate-600"
-                  title="Reset Timer"
-                >
-                  <RotateCcw className="h-3.5 w-3.5" />
                 </button>
               </div>
             </div>
 
-            {/* Linear Progress across questions */}
-            <div className="mt-4 h-1 w-full overflow-hidden rounded-full bg-slate-100">
+            {/* Linear Progress */}
+            <div className="mt-3 h-1 w-full overflow-hidden rounded-full bg-slate-100">
               <div
                 className="h-full rounded-full bg-blue-600 transition-all duration-300"
                 style={{
-                  width: `${((mockIndex + 1) / allQuestions.length) * 100}%`,
+                  width: `${((mockIndex + 1) / mockQuestionsList.length) * 100}%`,
                 }}
               />
             </div>
           </div>
 
-          {/* Assessment Question & Answer Workbench */}
+          {/* Assessment Layout */}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-            {/* Left: Question Prompt */}
+            {/* Left: Question Prompt & Context */}
             <div className="space-y-4 lg:col-span-6">
-              <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-xs space-y-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-mono text-xs font-semibold text-slate-400">
-                    Q{String(mockIndex + 1).padStart(2, "0")}
-                  </span>
-                  <span
-                    className={`rounded border px-2 py-0.5 text-xs font-medium ${
-                      currentMockQuestion.priority === "HIGH"
-                        ? "bg-red-50 text-red-700 border-red-200"
-                        : currentMockQuestion.priority === "MEDIUM"
-                        ? "bg-amber-50 text-amber-700 border-amber-200"
-                        : "bg-slate-100 text-slate-700 border-slate-200"
-                    }`}
-                  >
-                    {currentMockQuestion.priority} PRIORITY
-                  </span>
-                  <span className="rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs uppercase text-slate-600">
-                    {currentMockQuestion.category}
-                  </span>
+              <div className="rounded-lg border border-slate-300 bg-white p-5 shadow-xs space-y-3.5">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-mono text-xs font-semibold text-slate-400">
+                      Q{String(mockIndex + 1).padStart(2, "0")}
+                    </span>
+                    <span
+                      className={`rounded border px-1.5 py-0.2 text-[10px] font-medium ${
+                        currentMockQuestion.priority === "HIGH"
+                          ? "bg-red-50 text-red-700 border-red-200"
+                          : currentMockQuestion.priority === "MEDIUM"
+                          ? "bg-amber-50 text-amber-700 border-amber-200"
+                          : "bg-slate-100 text-slate-700 border-slate-200"
+                      }`}
+                    >
+                      {currentMockQuestion.priority} PRIORITY
+                    </span>
+                    <span className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.2 text-[10px] uppercase text-slate-600">
+                      {currentMockQuestion.category}
+                    </span>
+                  </div>
+
+                  {practicedIds.has(currentMockQuestion.id) && (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600">
+                      <CheckCircle2 className="h-3.5 w-3.5" /> Answered
+                    </span>
+                  )}
                 </div>
 
-                <h2 className="text-base font-semibold text-slate-900 leading-snug">
+                <h2 className="text-sm sm:text-base font-semibold text-slate-900 leading-snug">
                   {currentMockQuestion.question}
                 </h2>
 
                 {currentMockQuestion.context && (
-                  <div className="rounded border border-slate-100 bg-slate-50 p-3 text-xs text-slate-600">
-                    <span className="font-semibold text-slate-900">Interviewer Context: </span>
+                  <div className="rounded border border-slate-100 bg-slate-50 p-2.5 text-xs text-slate-600">
+                    <span className="font-semibold text-slate-900">Context: </span>
                     {currentMockQuestion.context}
                   </div>
                 )}
 
-                {/* What they test */}
                 {currentMockQuestion.whatInterviewerIsTesting && (
-                  <div className="space-y-1.5 text-xs">
+                  <div className="space-y-1 text-xs">
                     <span className="font-medium text-slate-700">
-                      Evaluation Criteria:
+                      Assessment Criteria:
                     </span>
-                    <div className="flex flex-wrap gap-1.5">
+                    <div className="flex flex-wrap gap-1">
                       {currentMockQuestion.whatInterviewerIsTesting.map((item, idx) => (
                         <span
                           key={idx}
@@ -514,33 +523,26 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
                     </div>
                   </div>
                 )}
+              </div>
 
-                {/* Hint toggle */}
-                <div className="border-t border-slate-100 pt-3">
-                  <button
-                    type="button"
-                    onClick={() => setShowMockHints(!showMockHints)}
-                    className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:underline"
-                  >
-                    {showMockHints ? (
-                      <>
-                        <EyeOff className="h-3.5 w-3.5" />
-                        <span>Hide Strategy & Talking Points</span>
-                      </>
-                    ) : (
-                      <>
-                        <Eye className="h-3.5 w-3.5" />
-                        <span>Show Recommended Response Points</span>
-                      </>
-                    )}
-                  </button>
+              {/* Evaluation Panel (Revealed after submission or on demand) */}
+              {isCurrentMockSubmitted && (
+                <div className="rounded-lg border border-slate-300 bg-white p-5 shadow-xs space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider">
+                      Strategy & Evaluation Benchmark
+                    </h4>
+                    <span className="rounded bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+                      Completed
+                    </span>
+                  </div>
 
-                  {showMockHints && currentMockQuestion.sampleTalkingPoints && (
-                    <div className="mt-3 rounded border border-blue-100 bg-blue-50/40 p-3 text-xs text-slate-700 space-y-1">
-                      <div className="font-semibold text-blue-900">
-                        Suggested Framework & Strategy:
-                      </div>
-                      <ul className="list-disc list-inside space-y-1 text-slate-700">
+                  {currentMockQuestion.sampleTalkingPoints && (
+                    <div className="space-y-1.5 text-xs">
+                      <span className="font-medium text-slate-800">
+                        Key Points to Check in Your Answer:
+                      </span>
+                      <ul className="list-disc list-inside space-y-1 text-slate-600">
                         {currentMockQuestion.sampleTalkingPoints.map((pt, idx) => (
                           <li key={idx} className="leading-relaxed">
                             {pt}
@@ -549,29 +551,35 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
                       </ul>
                     </div>
                   )}
+
+                  {currentMockQuestion.suggestedFramework && (
+                    <div className="text-[11px] text-slate-500 pt-1">
+                      Suggested Framework: <span className="font-medium text-slate-700">{currentMockQuestion.suggestedFramework}</span>
+                    </div>
+                  )}
                 </div>
-              </div>
+              )}
             </div>
 
-            {/* Right: Candidate Answer & Notes Space */}
-            <div className="space-y-4 lg:col-span-6">
-              <div className="flex flex-col justify-between h-full rounded-lg border border-slate-200 bg-white p-6 shadow-xs">
-                <div className="space-y-2">
+            {/* Right: Answer Input & Submission Workbench */}
+            <div className="space-y-3 lg:col-span-6">
+              <div className="flex flex-col justify-between rounded-lg border border-slate-300 bg-white p-5 shadow-xs min-h-[380px]">
+                <div className="space-y-2 flex-1">
                   <div className="flex items-center justify-between">
                     <label
-                      htmlFor="candidateNotes"
+                      htmlFor="candidateAnswer"
                       className="text-xs font-semibold text-slate-700"
                     >
-                      Candidate Response / Rough Notes
+                      Answer Input
                     </label>
                     <span className="text-[11px] text-slate-400">
-                      Auto-saved locally for this question
+                      Technical breakdown or STAR notes
                     </span>
                   </div>
                   <textarea
-                    id="candidateNotes"
+                    id="candidateAnswer"
                     rows={12}
-                    placeholder="Type your structured answer, bullet points, system design architecture, or STAR structure here..."
+                    placeholder="Write your structured response, system trade-offs, or talking points..."
                     value={mockNotes[currentMockQuestion.id] || ""}
                     onChange={(e) =>
                       setMockNotes((prev) => ({
@@ -579,56 +587,44 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
                         [currentMockQuestion.id]: e.target.value,
                       }))
                     }
-                    className="w-full rounded-md border border-slate-200 bg-slate-50/50 p-3 font-mono text-xs text-slate-900 placeholder:text-slate-400 focus:border-blue-600 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-600"
+                    className="w-full rounded-md border border-slate-300 bg-slate-50/50 p-3 font-mono text-xs text-slate-900 placeholder:text-slate-400 focus:border-blue-600 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-600"
                   />
                 </div>
 
-                {/* Bottom navigation controls */}
-                <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-4">
+                {/* Submit & Navigation Bar */}
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
                   <button
                     type="button"
-                    onClick={() => togglePracticed(currentMockQuestion.id)}
-                    className={`inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium transition ${
-                      practicedIds.has(currentMockQuestion.id)
-                        ? "border-emerald-300 bg-emerald-50 text-emerald-800"
-                        : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                    }`}
+                    onClick={() => handleSubmitAnswer(currentMockQuestion.id)}
+                    className="inline-flex items-center gap-1.5 rounded bg-blue-600 px-3.5 py-1.5 text-xs font-medium text-white transition hover:bg-blue-700"
                   >
-                    <CheckCircle2 className="h-3.5 w-3.5" />
-                    <span>
-                      {practicedIds.has(currentMockQuestion.id)
-                        ? "Marked as Answered"
-                        : "Mark as Answered"}
-                    </span>
+                    <Send className="h-3 w-3" />
+                    <span>{isCurrentMockSubmitted ? "Update Submission" : "Submit Answer"}</span>
                   </button>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5">
                     <button
                       type="button"
                       disabled={mockIndex === 0}
-                      onClick={() => {
-                        setMockIndex((prev) => Math.max(0, prev - 1));
-                        setShowMockHints(false);
-                      }}
-                      className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-40"
+                      onClick={() => setMockIndex((prev) => Math.max(0, prev - 1))}
+                      className="inline-flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40"
                     >
-                      <ArrowLeft className="h-3.5 w-3.5" />
-                      <span>Previous</span>
+                      <ArrowLeft className="h-3 w-3" />
+                      <span>Prev</span>
                     </button>
 
                     <button
                       type="button"
-                      disabled={mockIndex === allQuestions.length - 1}
-                      onClick={() => {
+                      disabled={mockIndex === mockQuestionsList.length - 1}
+                      onClick={() =>
                         setMockIndex((prev) =>
-                          Math.min(allQuestions.length - 1, prev + 1)
-                        );
-                        setShowMockHints(false);
-                      }}
-                      className="inline-flex items-center gap-1 rounded-md bg-blue-600 px-3.5 py-1.5 text-xs font-medium text-white shadow-xs transition hover:bg-blue-700 disabled:opacity-40"
+                          Math.min(mockQuestionsList.length - 1, prev + 1)
+                        )
+                      }
+                      className="inline-flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40"
                     >
-                      <span>Next Question</span>
-                      <ArrowRight className="h-3.5 w-3.5" />
+                      <span>Next</span>
+                      <ArrowRight className="h-3 w-3" />
                     </button>
                   </div>
                 </div>
@@ -640,7 +636,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
 
       {/* TAB: OVERVIEW & INSIGHTS */}
       {(activeTab === "all_intel" || activeTab === "overview") && (
-        <section id="section-overview" className="space-y-6">
+        <section id="section-overview" className="space-y-4">
           <SectionOverview overview={report.companyOverview} />
           <SectionWhatToKnow points={report.whatYouShouldKnow} />
         </section>
@@ -648,35 +644,35 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
 
       {/* TAB: PRIORITY QUESTIONS MATRIX */}
       {(activeTab === "all_intel" || activeTab === "priority_matrix") && (
-        <section id="section-priority-matrix" className="space-y-4">
+        <section id="section-priority-matrix" className="space-y-3">
           <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
             <div>
-              <h2 className="text-base font-semibold text-slate-900">
-                Questions Priority Matrix
+              <h2 className="text-sm font-semibold text-slate-900">
+                Questions Priority Matrix ({filteredQuestions.length})
               </h2>
               <p className="text-xs text-slate-500">
-                Filter by priority level, category, or search specific topics
+                Filter questions by urgency level, category, or search keywords
               </p>
             </div>
 
             {/* Search Input */}
-            <div className="relative w-full sm:w-64">
-              <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
+            <div className="relative w-full sm:w-60">
+              <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-slate-400" />
               <input
                 type="text"
-                placeholder="Search questions or keywords..."
+                placeholder="Filter questions..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full rounded-md border border-slate-200 bg-white py-1.5 pl-9 pr-3 text-xs text-slate-900 placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600"
+                className="w-full rounded-md border border-slate-300 bg-white py-1 pl-8 pr-3 text-xs text-slate-900 placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600"
               />
             </div>
           </div>
 
           {/* Filter Bar */}
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-slate-200 bg-white p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded border border-slate-200 bg-white p-2.5">
             {/* Priority filter */}
             <div className="flex flex-wrap items-center gap-1">
-              <span className="text-xs font-medium text-slate-500 mr-1.5 flex items-center gap-1">
+              <span className="text-[11px] font-medium text-slate-500 mr-1 flex items-center gap-1">
                 <Filter className="h-3 w-3" /> Priority:
               </span>
               {(["ALL", "HIGH", "MEDIUM", "LOW"] as const).map((p) => {
@@ -686,13 +682,13 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
                     key={p}
                     type="button"
                     onClick={() => setPriorityFilter(p)}
-                    className={`rounded px-2 py-1 text-xs font-medium transition ${
+                    className={`rounded px-2 py-0.5 text-[11px] font-medium transition ${
                       isSelected
                         ? "bg-slate-900 text-white"
                         : "bg-slate-50 text-slate-600 hover:bg-slate-100"
                     }`}
                   >
-                    {p === "ALL" ? "All Priorities" : `${p}`}
+                    {p === "ALL" ? "All" : p}
                   </button>
                 );
               })}
@@ -700,7 +696,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
 
             {/* Category filter */}
             <div className="flex flex-wrap items-center gap-1">
-              <span className="text-xs font-medium text-slate-500 mr-1.5">Category:</span>
+              <span className="text-[11px] font-medium text-slate-500 mr-1">Category:</span>
               {(["ALL", "company", "role", "hr"] as const).map((cat) => {
                 const isSelected = categoryFilter === cat;
                 return (
@@ -708,13 +704,13 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
                     key={cat}
                     type="button"
                     onClick={() => setCategoryFilter(cat)}
-                    className={`rounded px-2 py-1 text-xs font-medium uppercase transition ${
+                    className={`rounded px-2 py-0.5 text-[11px] font-medium uppercase transition ${
                       isSelected
                         ? "bg-blue-600 text-white"
                         : "bg-slate-50 text-slate-600 hover:bg-slate-100"
                     }`}
                   >
-                    {cat === "ALL" ? "All Categories" : cat}
+                    {cat === "ALL" ? "All" : cat}
                   </button>
                 );
               })}
@@ -722,10 +718,10 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
           </div>
 
           {/* Filtered Questions List */}
-          <div className="space-y-2.5">
+          <div className="space-y-2">
             {filteredQuestions.length === 0 ? (
-              <div className="rounded-md border border-slate-200 bg-white p-8 text-center text-xs text-slate-500">
-                No questions found matching your filter criteria.
+              <div className="rounded border border-slate-200 bg-white p-6 text-center text-xs text-slate-500">
+                No questions found matching criteria.
               </div>
             ) : (
               filteredQuestions.map((q, idx) => (
@@ -744,17 +740,17 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
 
       {/* TAB: COMPANY QUESTIONS (10) */}
       {(activeTab === "all_intel" || activeTab === "company_questions") && (
-        <section id="section-company-questions" className="space-y-3">
+        <section id="section-company-questions" className="space-y-2.5">
           <div>
-            <h2 className="text-base font-semibold text-slate-900">
-              Company-Specific Interview Questions
+            <h2 className="text-sm font-semibold text-slate-900">
+              Company Questions (10)
             </h2>
             <p className="text-xs text-slate-500">
-              10 targeted questions testing business model, engineering trade-offs, and product architecture
+              Targeted questions on product architecture, business model, and engineering scale
             </p>
           </div>
 
-          <div className="space-y-2.5">
+          <div className="space-y-2">
             {report.companyQuestions.map((q, idx) => (
               <QuestionCard
                 key={q.id || idx}
@@ -770,17 +766,17 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
 
       {/* TAB: ROLE SPECIFIC (10) */}
       {(activeTab === "all_intel" || activeTab === "role_questions") && (
-        <section id="section-role-questions" className="space-y-3">
+        <section id="section-role-questions" className="space-y-2.5">
           <div>
-            <h2 className="text-base font-semibold text-slate-900">
-              Role-Specific Technical Questions ({report.targetRole})
+            <h2 className="text-sm font-semibold text-slate-900">
+              Role-Specific Questions: {report.targetRole} (10)
             </h2>
             <p className="text-xs text-slate-500">
-              10 technical questions calibrated for {report.experienceLevel} candidates
+              Technical assessment questions calibrated for {report.experienceLevel} candidates
             </p>
           </div>
 
-          <div className="space-y-2.5">
+          <div className="space-y-2">
             {report.roleSpecificQuestions.map((q, idx) => (
               <QuestionCard
                 key={q.id || idx}
@@ -796,17 +792,17 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
 
       {/* TAB: HR & CULTURE (8) */}
       {(activeTab === "all_intel" || activeTab === "hr_questions") && (
-        <section id="section-hr-questions" className="space-y-3">
+        <section id="section-hr-questions" className="space-y-2.5">
           <div>
-            <h2 className="text-base font-semibold text-slate-900">
-              HR & Behavioral Culture Questions
+            <h2 className="text-sm font-semibold text-slate-900">
+              HR & Behavioral Culture Questions (8)
             </h2>
             <p className="text-xs text-slate-500">
-              8 behavioral questions evaluating cultural alignment and operating values
+              Behavioral and situational questions evaluating team collaboration and operating principles
             </p>
           </div>
 
-          <div className="space-y-2.5">
+          <div className="space-y-2">
             {report.hrQuestions.map((q, idx) => (
               <QuestionCard
                 key={q.id || idx}
@@ -822,7 +818,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
 
       {/* TAB: RECENT DEVELOPMENTS */}
       {(activeTab === "all_intel" || activeTab === "recent_news") && (
-        <section id="section-recent-news" className="space-y-4">
+        <section id="section-recent-news" className="space-y-3">
           <SectionRecentNews
             developments={report.recentDevelopments}
             companyName={report.companyName}
@@ -832,7 +828,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
 
       {/* TAB: PREPARATION STRATEGY */}
       {(activeTab === "all_intel" || activeTab === "prep_tips") && (
-        <section id="section-prep-tips" className="space-y-4">
+        <section id="section-prep-tips" className="space-y-3">
           <SectionPrepTips
             tips={report.prepTips}
             suggestedQuestionsToAsk={report.suggestedQuestionsToAskInterviewer}
@@ -844,7 +840,7 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
 
       {/* TAB: SOURCES & GROUNDING */}
       {(activeTab === "all_intel" || activeTab === "sources") && (
-        <section id="section-sources" className="space-y-4">
+        <section id="section-sources" className="space-y-3">
           <SectionSources
             sources={report.sourcesCited}
             confidenceRating={report.confidenceRating}
