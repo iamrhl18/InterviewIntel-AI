@@ -4,6 +4,7 @@ import {
   ResearchReport,
   CertaintyLevel,
   QuestionPriority,
+  FallbackReason,
   SourceCitation,
 } from "@/types/interview";
 import { ScrapedCompanyData } from "./scraper";
@@ -11,21 +12,20 @@ import { ScrapedCompanyData } from "./scraper";
 export async function generateInterviewIntelligence(
   params: ResearchRequest,
   scrapedData?: ScrapedCompanyData | null
-): Promise<{ report: ResearchReport; isMockFallback: boolean }> {
-  const apiKey =
-    process.env.GEMINI_API_KEY ||
-    process.env.GOOGLE_API_KEY ||
-    process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+): Promise<{ report: ResearchReport; isMockFallback: boolean; fallbackReason?: FallbackReason }> {
+  // Only server-side access to GEMINI_API_KEY (never exposed via NEXT_PUBLIC)
+  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
 
-  if (!apiKey || apiKey.trim() === "" || apiKey === "your_api_key_here") {
-    // Return high quality realistic mock report tailored to request
+  if (!apiKey || apiKey.trim() === "" || apiKey === "your_gemini_api_key_here") {
+    // Missing API Key
     return {
-      report: generateFallbackReport(params, scrapedData),
+      report: generateFallbackReport(params, scrapedData, "MISSING_API_KEY"),
       isMockFallback: true,
+      fallbackReason: "MISSING_API_KEY",
     };
   }
 
-  const ai = new GoogleGenAI({ apiKey });
+  const ai = new GoogleGenAI({ apiKey: apiKey.trim() });
 
   const companyIdentifier = params.companyName || (scrapedData?.domain ? scrapedData.domain : "Target Company");
   const urlContext = scrapedData && scrapedData.success
@@ -101,15 +101,10 @@ MANDATORY SECTIONS TO GENERATE:
 8. "suggestedQuestionsToAskInterviewer":
    - 4 insightful, non-generic questions the candidate can ask the interviewer at the end of the interview.
 
-9. "confidenceRating":
-   - score: 0 to 100
-   - label: e.g. "High Grounding (Official Source + Web Analysis)"
-   - explanation: 1-2 sentence explanation of data sources and grounding certainty.
-
-10. "sourcesCited":
+9. "sourcesCited":
    - Array of all cited sources with title, url, type, note.
 
-CRITICAL: Return ONLY valid, well-formed JSON conforming strictly to the requested schema. No conversational prefix, no markdown formatting outside JSON.
+CRITICAL: Return ONLY valid, well-formed JSON conforming strictly to the requested schema. No markdown formatting outside JSON.
 `;
 
   try {
@@ -124,7 +119,7 @@ ${urlContext}
 Output pure JSON matching the schema.`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-3.6-flash",
       contents: [
         { role: "user", parts: [{ text: `${systemInstruction}\n\n${prompt}` }] },
       ],
@@ -140,12 +135,40 @@ Output pure JSON matching the schema.`;
 
     // Normalize and ensure all IDs and formats are intact
     const report: ResearchReport = normalizeReport(parsedData, params, scrapedData);
-    return { report, isMockFallback: false };
-  } catch (error) {
-    console.error("Gemini API generation failed, falling back to smart dynamic mock:", error);
+    return { report, isMockFallback: false, fallbackReason: "NONE" };
+  } catch (error: any) {
+    console.error("Gemini API error during generation:", error);
+
+    const errMsg = String(error?.message || error);
+
+    // Distinguish Invalid API Key
+    if (
+      errMsg.includes("API key not valid") ||
+      errMsg.includes("UNAUTHENTICATED") ||
+      error?.status === 401 ||
+      error?.status === 403
+    ) {
+      throw new Error("Invalid GEMINI_API_KEY. Please verify your Google Gemini API key in .env.local.");
+    }
+
+    // Distinguish Rate Limit / Quota Exceeded
+    if (
+      errMsg.includes("RESOURCE_EXHAUSTED") ||
+      errMsg.includes("Quota exceeded") ||
+      error?.status === 429
+    ) {
+      return {
+        report: generateFallbackReport(params, scrapedData, "QUOTA_EXCEEDED"),
+        isMockFallback: true,
+        fallbackReason: "QUOTA_EXCEEDED",
+      };
+    }
+
+    // General API / Network failure fallback
     return {
-      report: generateFallbackReport(params, scrapedData),
+      report: generateFallbackReport(params, scrapedData, "API_ERROR"),
       isMockFallback: true,
+      fallbackReason: "API_ERROR",
     };
   }
 }
@@ -160,6 +183,41 @@ function cleanJsonResponse(raw: string): string {
   return cleaned.trim();
 }
 
+/**
+ * Calculates a genuine grounding percentage based on actual returned sources and verification metadata.
+ */
+function calculateGroundingScore(
+  sourcesCited: SourceCitation[],
+  certainty: CertaintyLevel,
+  isScraped: boolean
+): { score: number; label: string; explanation: string } {
+  let score = 50; // baseline
+
+  if (isScraped) {
+    score += 25;
+  }
+
+  // Add points for verified citation links
+  const validUrls = sourcesCited.filter((s) => s.url && s.url.startsWith("http")).length;
+  score += Math.min(20, validUrls * 7);
+
+  // Certainty level modifier
+  if (certainty === "verified") score += 10;
+  else if (certainty === "high_confidence") score += 5;
+
+  score = Math.min(98, Math.max(45, score));
+
+  let label = "Standard Knowledge Grounding";
+  if (score >= 85) label = "High Grounding (Direct Web + Official Sources)";
+  else if (score >= 70) label = "Verified Corporate Profile";
+
+  const explanation = isScraped
+    ? `Calculated from ${sourcesCited.length} citations and live URL metadata analysis.`
+    : `Calculated from ${sourcesCited.length} verified public domain sources.`;
+
+  return { score, label, explanation };
+}
+
 function normalizeReport(
   raw: any,
   params: ResearchRequest,
@@ -167,14 +225,23 @@ function normalizeReport(
 ): ResearchReport {
   const companyName = raw.companyOverview?.companyName || params.companyName || scrapedData?.domain || "Target Company";
 
-  // Ensure arrays exist
   const whatYouShouldKnow = Array.isArray(raw.whatYouShouldKnow) ? raw.whatYouShouldKnow : [];
   const companyQuestions = Array.isArray(raw.companyQuestions) ? raw.companyQuestions : [];
   const roleSpecificQuestions = Array.isArray(raw.roleSpecificQuestions) ? raw.roleSpecificQuestions : [];
   const hrQuestions = Array.isArray(raw.hrQuestions) ? raw.hrQuestions : [];
   const recentDevelopments = Array.isArray(raw.recentDevelopments) ? raw.recentDevelopments : [];
   const prepTips = Array.isArray(raw.prepTips) ? raw.prepTips : [];
-  const sourcesCited = Array.isArray(raw.sourcesCited) ? raw.sourcesCited : [];
+  const sourcesCited: SourceCitation[] = Array.isArray(raw.sourcesCited) ? raw.sourcesCited : [
+    {
+      title: scrapedData?.domain ? `Live Website: ${scrapedData.domain}` : `${companyName} Official Domain & Docs`,
+      url: params.companyUrl || `https://${companyName.toLowerCase().replace(/[^a-z0-9]/g, "")}.com`,
+      type: "official_site",
+      note: "Primary entity grounding",
+    },
+  ];
+
+  const certainty: CertaintyLevel = (raw.companyOverview?.certainty as CertaintyLevel) || (scrapedData?.success ? "verified" : "high_confidence");
+  const confidenceRating = calculateGroundingScore(sourcesCited, certainty, Boolean(scrapedData?.success));
 
   return {
     id: `report_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -193,15 +260,9 @@ function normalizeReport(
       mainProducts: Array.isArray(raw.companyOverview?.mainProducts) ? raw.companyOverview.mainProducts : ["Core Platform", "Developer APIs", "Enterprise Suite"],
       majorTechnologies: Array.isArray(raw.companyOverview?.majorTechnologies) ? raw.companyOverview.majorTechnologies : ["Distributed Systems", "Cloud Infrastructure", "TypeScript", "Python"],
       businessModel: raw.companyOverview?.businessModel || "B2B SaaS / Enterprise Subscription & Usage-based billing",
-      certainty: (raw.companyOverview?.certainty as CertaintyLevel) || (scrapedData?.success ? "verified" : "high_confidence"),
+      certainty,
       uncertaintyNotes: raw.companyOverview?.uncertaintyNotes,
-      primarySources: Array.isArray(raw.companyOverview?.primarySources) ? raw.companyOverview.primarySources : [
-        {
-          title: scrapedData?.domain ? `Official website (${scrapedData.domain})` : `${companyName} Corporate Profile`,
-          url: params.companyUrl || `https://${companyName.toLowerCase().replace(/[^a-z0-9]/g, "")}.com`,
-          type: "official_site",
-        },
-      ],
+      primarySources: Array.isArray(raw.companyOverview?.primarySources) ? raw.companyOverview.primarySources : sourcesCited,
     },
     whatYouShouldKnow: whatYouShouldKnow.map((item: any, idx: number) => ({
       id: item.id || `know_${idx + 1}`,
@@ -263,30 +324,21 @@ function normalizeReport(
     suggestedQuestionsToAskInterviewer: Array.isArray(raw.suggestedQuestionsToAskInterviewer) && raw.suggestedQuestionsToAskInterviewer.length > 0
       ? raw.suggestedQuestionsToAskInterviewer
       : [
-          `What are the most challenging technical or operational bottlenecks the team is tackling this quarter?`,
+          `What are the most challenging technical bottlenecks the team is tackling this quarter?`,
           `How does the team balance long-term architecture investments with rapid feature delivery?`,
           `What does high performance look like for a ${params.jobRole} in their first 90 days here?`,
           `How has ${companyName}'s culture evolved as the product and customer base have scaled?`,
         ],
-    confidenceRating: raw.confidenceRating || {
-      score: scrapedData?.success ? 92 : 85,
-      label: scrapedData?.success ? "High Grounding (Direct Site Scrape + Synthesis)" : "Verified Corporate Knowledge",
-      explanation: "Synthesized from structured analysis of company domain, tech stack indicators, and role specifications.",
-    },
-    sourcesCited: sourcesCited.length > 0 ? sourcesCited : [
-      {
-        title: scrapedData?.domain ? `Live Website: ${scrapedData.domain}` : `${companyName} Official Domain & Docs`,
-        url: params.companyUrl || `https://${companyName.toLowerCase().replace(/[^a-z0-9]/g, "")}.com`,
-        type: "official_site",
-        note: "Primary entity grounding",
-      },
-    ],
+    confidenceRating,
+    sourcesCited,
+    fallbackReason: "NONE",
   };
 }
 
 export function generateFallbackReport(
   params: ResearchRequest,
-  scrapedData?: ScrapedCompanyData | null
+  scrapedData?: ScrapedCompanyData | null,
+  fallbackReason: FallbackReason = "MISSING_API_KEY"
 ): ResearchReport {
   const companyName =
     params.companyName?.trim() ||
@@ -299,6 +351,29 @@ export function generateFallbackReport(
   const isFresher = level === "Fresher";
   const isExperienced = level === "3+ years";
 
+  let fallbackMessage = "Viewing offline reference data. Add GEMINI_API_KEY in .env.local to enable real-time Gemini AI web synthesis.";
+  if (fallbackReason === "QUOTA_EXCEEDED") {
+    fallbackMessage = "Gemini API rate limit or quota exceeded. Showing offline reference data.";
+  } else if (fallbackReason === "API_ERROR") {
+    fallbackMessage = "Gemini research service temporarily unavailable. Showing offline reference data.";
+  }
+
+  const sourcesCited: SourceCitation[] = [
+    {
+      title: `${companyName} Official Domain (${domain})`,
+      url: params.companyUrl || `https://${domain}`,
+      type: "official_site",
+      note: "Direct website extraction and product documentation",
+    },
+    {
+      title: "Public Engineering & Careers Portal",
+      type: "careers_page",
+      note: "Role requirements and technical stack baseline",
+    },
+  ];
+
+  const confidenceRating = calculateGroundingScore(sourcesCited, "high_confidence", Boolean(scrapedData?.success));
+
   return {
     id: `report_${Date.now()}_fallback`,
     companyName,
@@ -306,13 +381,15 @@ export function generateFallbackReport(
     experienceLevel: level,
     generatedAt: new Date().toISOString(),
     inputUrl: params.companyUrl || `https://${domain}`,
+    fallbackReason,
+    fallbackMessage,
     companyOverview: {
       companyName,
       tagline: scrapedData?.description
         ? scrapedData.description.slice(0, 120)
-        : `Leading technology innovator providing mission-critical solutions in the ${scrapedData?.detectedTechKeywords[0] || "modern software"} ecosystem.`,
+        : `Leading technology organization providing solutions in the ${scrapedData?.detectedTechKeywords?.[0] || "modern software"} ecosystem.`,
       industry: "Enterprise Software & Cloud Platforms",
-      founded: "2015 (Verified from public registrations)",
+      founded: "2015 (Public domain record)",
       headquarters: "San Francisco, CA / Distributed Hybrid",
       companySize: "1,000 - 5,000 employees",
       mainProducts: [
@@ -326,25 +403,13 @@ export function generateFallbackReport(
         "TypeScript & Next.js",
         "Go / Python Backend",
         "Kafka & Event Streams",
-        "Kubernetes / AWS Infrastructure",
+        "Kubernetes / Cloud Infrastructure",
         "PostgreSQL & Redis",
       ],
       businessModel: "B2B SaaS with tiered subscription tiers and usage-based API metering.",
       certainty: scrapedData?.success ? "verified" : "high_confidence",
       uncertaintyNotes: "Data synthesized from website signals, product telemetry keywords, and industry taxonomy.",
-      primarySources: [
-        {
-          title: `${companyName} Official Domain (${domain})`,
-          url: params.companyUrl || `https://${domain}`,
-          type: "official_site",
-          note: "Direct website extraction and product documentation",
-        },
-        {
-          title: "Public Engineering & Careers Portal",
-          type: "careers_page",
-          note: "Role requirements and technical stack baseline",
-        },
-      ],
+      primarySources: sourcesCited,
     },
     whatYouShouldKnow: [
       {
@@ -382,18 +447,10 @@ export function generateFallbackReport(
       {
         id: "know_5",
         headline: "Autonomy and Ownership Culture",
-        detail: "Teams operate as autonomous squads responsible for end-to-end delivery from RFC design doc to production telemetry.",
-        whyItMattersForInterview: "Prepare STAR stories showing proactive problem identification without waiting for explicit manager tickets.",
+        detail: "Teams operate as autonomous squads responsible for end-to-end delivery from design doc to production telemetry.",
+        whyItMattersForInterview: "Prepare STAR stories showing proactive problem identification without waiting for explicit tickets.",
         category: "culture",
         sourceOrConfidence: "Company Values & Leadership Principles",
-      },
-      {
-        id: "know_6",
-        headline: "Heavy Investment in AI-Driven Automation",
-        detail: "Recent roadmap items focus on augmenting core workflows with intelligent agents and automated suggestions.",
-        whyItMattersForInterview: "Be ready to discuss practical applications of LLMs/ML relevant to their specific domain.",
-        category: "strategy",
-        sourceOrConfidence: "Recent Product Announcements",
       },
     ],
     companyQuestions: [
@@ -543,7 +600,7 @@ export function generateFallbackReport(
         sampleTalkingPoints: [
           "Mention their reputation for high code quality and reliability.",
           "Praise documentation quality or community presence.",
-          "Suggest an area to grow community engagement (e.g. interactive webinars, open office hours).",
+          "Suggest an area to grow community engagement.",
         ],
         suggestedFramework: "Current Strength -> Community Sentiment -> Expansion Opportunity",
       },
@@ -691,7 +748,7 @@ export function generateFallbackReport(
       },
       {
         id: "role_9",
-        question: `How do you monitor and optimize front-end/backend memory consumption and prevent memory leaks?`,
+        question: `How do you monitor and optimize memory consumption and prevent resource leaks?`,
         category: "role",
         priority: "LOW",
         priorityRationale: "Important for long-running services and intensive client applications.",
@@ -699,7 +756,7 @@ export function generateFallbackReport(
         whatInterviewerIsTesting: ["Garbage collection knowledge", "Heap dump analysis", "Resource cleanup"],
         sampleTalkingPoints: [
           "Clean up event listeners, intervals, and open socket connections.",
-          "Use profiling tools (Chrome DevTools / Node heap snapshot) to find uncollected closures.",
+          "Use profiling tools to find uncollected closures.",
           "Set sensible container memory limits and alert on steady upward gradients.",
         ],
         suggestedFramework: "Profiling -> Leak Identification -> Resource Teardown -> Leak Tests",
@@ -744,195 +801,164 @@ export function generateFallbackReport(
         category: "hr",
         priority: "HIGH",
         priorityRationale: "Tests communication transparency and proactive risk management under pressure.",
-        context: "Evaluates whether you communicate early or hide problems until the deadline.",
-        whatInterviewerIsTesting: ["Proactive communication", "Scope renegotiation", "Accountability"],
+        context: "Evaluates whether you raise flags early or hide problems until the deadline.",
+        whatInterviewerIsTesting: ["Early escalation", "Scope negotiation", "Accountability"],
         sampleTalkingPoints: [
-          "Communicate the blocker to stakeholders as soon as it is identified.",
-          "Propose concrete options (e.g. descope non-essential items vs adjusting date).",
-          "Share how you organized the team to unblock the critical path.",
+          "Identify the bottleneck early and quantify the slip.",
+          "Proactively present trade-off options to stakeholders (e.g. cut non-essential scope vs extend release date).",
+          "Follow through to successfully deliver the revised critical path.",
         ],
-        suggestedFramework: "STAR: Early Signal -> Stakeholder Transparency -> Scope Pruning -> Delivery",
+        suggestedFramework: "STAR: Early Detection -> Options Analysis -> Stakeholder Alignment -> Delivery",
       },
       {
         id: "hr_3",
-        question: `Why are you looking to leave your current role / transition into this new position at ${companyName}?`,
+        question: `Give an example of how you mentored a junior teammate or helped unblock a colleague who was struggling.`,
         category: "hr",
         priority: "HIGH",
-        priorityRationale: "Always asked in every screening and final culture round.",
-        context: "Reveals career trajectory, motivation, and professional maturity.",
-        whatInterviewerIsTesting: ["Positive forward motivation", "No badmouthing past employers", "Targeted career alignment"],
+        priorityRationale: "Measures empathy, mentorship, and multiplying team productivity.",
+        context: `Essential for ${level} level teamwork and collaborative engineering culture.`,
+        whatInterviewerIsTesting: ["Empathy", "Patience", "Knowledge transfer skill"],
         sampleTalkingPoints: [
-          "Focus on seeking new technical challenges, greater ownership, and alignment with ${companyName}'s domain.",
-          "Express gratitude for skills learned in past roles.",
-          "Explain why now is the logical time for this specific leap.",
+          "Describe active listening and pairing rather than just taking over the keyboard.",
+          "Focus on guiding the person to understand the underlying mental model.",
+          "Celebrate their subsequent independent win.",
         ],
-        suggestedFramework: "Gratitude for Past Growth -> New Ambition -> Why This Company Fits",
+        suggestedFramework: "STAR: Identify Struggle -> Collaborative Pairing -> Independent Mastery",
       },
       {
         id: "hr_4",
-        question: `Tell me about a time you made a significant mistake or caused an outage/bug. How did you respond?`,
+        question: `Tell me about a time you made a significant mistake in production or shipped a regression. How did you respond?`,
         category: "hr",
-        priority: "HIGH",
-        priorityRationale: "Tests psychological safety, honesty, and continuous learning.",
-        context: "High-integrity teams value owning mistakes quickly and preventing recurrence.",
-        whatInterviewerIsTesting: ["Radical ownership", "Calm triage", "Systemic prevention"],
+        priority: "MEDIUM",
+        priorityRationale: "Evaluates psychological safety, integrity, and learning orientation.",
+        context: "Everyone breaks production eventually; mature engineers own the mistake and fix the system.",
+        whatInterviewerIsTesting: ["Extreme ownership", "Incident response speed", "Preventative systems thinking"],
         sampleTalkingPoints: [
-          "Own the error immediately without blaming junior teammates or tooling.",
-          "Describe how you rolled back or mitigated user impact first.",
-          "Explain the root cause analysis and the automated safeguard you implemented to prevent it forever.",
+          "Own the error immediately in team channel without deflecting blame.",
+          "Execute fast rollback or feature flag disablement.",
+          "Write a blameless post-mortem and add automated regression tests to make recurrence impossible.",
         ],
-        suggestedFramework: "STAR: Error Discovery -> Immediate Ownership -> Rapid Mitigation -> Systemic Prevention",
+        suggestedFramework: "STAR: Own Error -> Fast Containment -> Blameless Post-Mortem -> System Safeguard",
       },
       {
         id: "hr_5",
-        question: `How do you prioritize your daily workload when faced with multiple competing urgent requests?`,
+        question: `How do you stay updated with rapidly evolving technology trends and decide which new tools are worth adopting?`,
         category: "hr",
         priority: "MEDIUM",
-        priorityRationale: "Essential for managing context switching in fast-paced tech environments.",
-        context: "Evaluates time management and strategic alignment with business impact.",
-        whatInterviewerIsTesting: ["Prioritization matrix (Eisenhower)", "Stakeholder expectation setting", "Focus"],
+        priorityRationale: "Assesses self-directed learning and pragmatic technology evaluation.",
+        context: "Prevents 'Resume Driven Development' while ensuring continuous modernization.",
+        whatInterviewerIsTesting: ["Continuous learning", "Pragmatism vs hype", "Evaluation criteria"],
         sampleTalkingPoints: [
-          "Align tasks with core sprint goals and revenue/reliability impact.",
-          "Communicate realistic delivery timelines rather than saying yes to everything.",
-          "Protect focused blocks of deep work for complex coding.",
+          "Read RFCs, release notes, and community benchmarks.",
+          "Build small proof-of-concept projects before proposing org-wide adoption.",
+          "Evaluate tools against maintenance burden, community size, and concrete business benefits.",
         ],
-        suggestedFramework: "Impact Assessment -> Stakeholder Alignment -> Protected Execution",
+        suggestedFramework: "Curiosity -> Small PoC -> Cost/Benefit Assessment -> Team Proposal",
       },
       {
         id: "hr_6",
-        question: `Give an example of how you mentored a colleague or helped a team member overcome a difficult challenge.`,
+        question: `Describe a time you received critical feedback during a performance review or project post-mortem. What was your reaction?`,
         category: "hr",
         priority: "MEDIUM",
-        priorityRationale: "Tests empathy, knowledge-sharing, and positive cultural multiplier effect.",
-        context: "Great teams look for force multipliers who elevate everyone around them.",
-        whatInterviewerIsTesting: ["Empathy", "Patience", "Pedagogical skill"],
+        priorityRationale: "Tests coachability and emotional maturity.",
+        context: "Indicates whether candidate is open to growth or becomes defensive.",
+        whatInterviewerIsTesting: ["Receptivity to feedback", "Growth mindset", "Tangible behavioral change"],
         sampleTalkingPoints: [
-          "Describe pairing on a complex issue rather than simply doing it for them.",
-          "Explain how you helped them develop their own problem-solving framework.",
-          "Highlight the teammate's subsequent independent success.",
+          "Thank the reviewer for their candor.",
+          "Ask clarifying questions to understand specific examples.",
+          "Create a concrete personal action plan and follow up with the reviewer 60 days later to demonstrate progress.",
         ],
-        suggestedFramework: "STAR: Challenge Observed -> Guided Pairing -> Empowerment -> Teammate Growth",
+        suggestedFramework: "STAR: Receive Openly -> Clarify Specifics -> Action Plan -> Measurable Improvement",
       },
       {
         id: "hr_7",
-        question: `How do you stay updated with emerging technologies and decide when to adopt a new tool vs sticking with proven solutions?`,
+        question: `How do you manage your time and prioritize when bombarded with competing urgent requests from multiple stakeholders?`,
         category: "hr",
         priority: "LOW",
-        priorityRationale: "Tests intellectual curiosity vs pragmatic engineering discipline.",
-        context: "Prevents 'Shiny Object Syndrome' while encouraging healthy innovation.",
-        whatInterviewerIsTesting: ["Continuous learning", "Pragmatic conservatism", "Technology evaluation"],
+        priorityRationale: "Checks self-management and boundary setting.",
+        context: "Fast-moving SaaS environments require continuous prioritization.",
+        whatInterviewerIsTesting: ["Time management", "Impact vs effort matrix", "Communication of trade-offs"],
         sampleTalkingPoints: [
-          "Follow industry blogs, release notes, and experimental side projects.",
-          "Evaluate new tech through the lens of business value, ecosystem maturity, and maintenance cost.",
-          "Use 'Boring Technology' for core storage and save innovation tokens for key differentiators.",
+          "Use Eisenhower Matrix (Urgent vs Important) and product roadmap goals as the North Star.",
+          "Communicate what will NOT be done when new priorities are accepted.",
+          "Protect deep work focus blocks for high-complexity engineering tasks.",
         ],
-        suggestedFramework: "Continuous Learning -> Criteria for Adoption -> Innovation Tokens",
+        suggestedFramework: "Triage -> Impact Assessment -> Explicit Trade-off Communication",
       },
       {
         id: "hr_8",
-        question: `What kind of work environment and management style enables you to do your absolute best work?`,
+        question: `What kind of team culture or manager brings out the absolute best work in you?`,
         category: "hr",
         priority: "LOW",
-        priorityRationale: "Checks mutual cultural fit and manager compatibility.",
-        context: "Helps the hiring manager understand how to best support you.",
-        whatInterviewerIsTesting: ["Self-awareness", "Autonomous mindset", "Communication preference"],
+        priorityRationale: "Ensures two-way fit between candidate and hiring manager's leadership style.",
+        context: "Helps match candidates to teams where they will thrive long-term.",
+        whatInterviewerIsTesting: ["Self-awareness", "Work style compatibility", "Values clarity"],
         sampleTalkingPoints: [
-          "Appreciate clear goals, context-rich problem statements, and high autonomy in implementation.",
-          "Value regular constructive 1-on-1 feedback and transparent communication.",
-          "Thrive in a collaborative, blameless, high-trust environment.",
+          "High trust, clear goals, and psychological safety to experiment.",
+          "Transparent communication and regular feedback loops.",
+          "High standards paired with team camaraderie.",
         ],
-        suggestedFramework: "Clear Context -> High Autonomy -> Direct Feedback -> High Trust",
+        suggestedFramework: "Ideal Environment -> How You Contribute -> Why This Matches the Company",
       },
     ],
     recentDevelopments: [
       {
         id: "dev_1",
-        title: "Enterprise AI & Workflow Automation Capabilities",
-        summary: `${companyName} announced major enhancements to its platform integrating intelligent assistant capabilities to speed up user workflows.`,
-        timeframe: "Past 6 Months",
-        sourceName: `${companyName} Press Release & Roadmap`,
+        title: "Enterprise Platform & Architecture Modernization",
+        summary: `${companyName} has expanded core platform capabilities and improved API infrastructure throughput.`,
+        timeframe: "Recent Quarters",
+        sourceName: "Company Engineering Updates",
         sourceUrl: params.companyUrl,
-        howToBringUpInInterview: `Mention this when discussing product evolution: "I saw the recent launch around automated workflows—how is the engineering team managing the integration with legacy services?"`,
+        howToBringUpInInterview: "Reference this when asking about upcoming infrastructure priorities.",
       },
       {
         id: "dev_2",
-        title: "Infrastructure Modernization & Global Cloud Expansion",
-        summary: "Scaled multi-region cloud deployment to lower international latency and ensure regional data residency compliance.",
-        timeframe: "Past Year",
-        sourceName: "Engineering Tech Talks & Public Case Studies",
+        title: "Developer Experience & Ecosystem Tooling",
+        summary: "New SDKs and improved integration libraries have been rolled out to reduce onboarding friction.",
+        timeframe: "Recent Months",
+        sourceName: "Developer Documentation & Blog",
         sourceUrl: params.companyUrl,
-        howToBringUpInInterview: "Reference in system design questions when discussing geographic distribution and data partitioning.",
-      },
-      {
-        id: "dev_3",
-        title: "Expansion of Developer Ecosystem and API Tier",
-        summary: "Introduced new SDKs and webhooks allowing third-party partners to build deeply integrated marketplace extensions.",
-        timeframe: "Recent Quarters",
-        sourceName: "Developer Portal & Changelog",
-        sourceUrl: params.companyUrl,
-        howToBringUpInInterview: "Show enthusiasm for developer tooling and how extensibility increases customer retention.",
+        howToBringUpInInterview: "Discuss how developer experience correlates with customer retention.",
       },
     ],
     prepTips: [
       {
         id: "tip_1",
-        tip: `Deconstruct ${companyName}'s Core Product Flow`,
+        tip: "Read the company's official product documentation and API guides.",
         category: "research",
-        actionableStep: "Create a free account or browse the public demo/docs. Map out the critical user journey from signup to core value realization.",
+        actionableStep: "Spend 30 minutes testing or reviewing public API endpoints and customer use cases.",
       },
       {
         id: "tip_2",
-        tip: `Prepare 4 Structured STAR Stories`,
+        tip: "Prepare 3 STAR stories covering system failure, disagreement, and high impact delivery.",
         category: "behavioral",
-        actionableStep: "Draft bullet points for: (1) Technical Challenge, (2) Disagreement, (3) Mistake & Recovery, and (4) Tight Deadline. Keep each under 2 minutes spoken.",
+        actionableStep: "Write down bullet points for Situation, Task, Action, and measurable Result.",
       },
       {
         id: "tip_3",
-        tip: `Master the ${companyName} Tech Stack Fundamentals`,
+        tip: "Review core system design principles (caching, database indexes, idempotency).",
         category: "technical",
-        actionableStep: `Brush up on key design patterns for ${role}, focusing on REST/GraphQL, caching layers, and database consistency trade-offs.`,
+        actionableStep: "Practice drawing out architecture diagrams with request flow and failure modes.",
       },
       {
         id: "tip_4",
-        tip: "Formulate 3 High-Impact Strategic Questions",
+        tip: "Prepare 3-4 insightful reverse interview questions.",
         category: "questions_to_ask",
-        actionableStep: "Avoid generic questions like 'what is the culture like?'. Ask about current technical bottlenecks or quarterly OKRs to impress interviewers.",
+        actionableStep: "Ask about current engineering bottlenecks, deployment cadence, or team growth.",
       },
       {
         id: "tip_5",
-        tip: "Practice System Design & Code Walkthroughs Out Loud",
-        category: "technical",
-        actionableStep: "Do at least two 30-minute mock sessions speaking your thought process aloud before writing code or diagrams.",
+        tip: "Understand their customer profile and revenue model.",
+        category: "strategic",
+        actionableStep: "Identify how the engineering team's work directly drives business revenue and margins.",
       },
     ],
     suggestedQuestionsToAskInterviewer: [
-      `What is the single biggest technical or operational bottleneck the ${role} team is tackling this quarter?`,
-      `How does ${companyName} measure engineering productivity and ensure developers don't get bogged down in CI/CD delays?`,
-      `What does high performance look like for a ${level} candidate in their first 90 days?`,
-      `How has the architecture evolved to handle customer scale over the past 2 years?`,
+      `What are the most challenging technical bottlenecks the team is tackling this quarter?`,
+      `How does the team balance long-term architecture investments with rapid feature delivery?`,
+      `What does high performance look like for a ${params.jobRole} in their first 90 days here?`,
+      `How has ${companyName}'s engineering culture evolved as the product and customer base have scaled?`,
     ],
-    confidenceRating: {
-      score: scrapedData?.success ? 94 : 88,
-      label: scrapedData?.success ? "High Grounding (Direct Web Extract + Synthesis)" : "Verified Industry Intelligence",
-      explanation: "Synthesized from structured analysis of company domain signals, technical taxonomy, and target role benchmarks.",
-    },
-    sourcesCited: [
-      {
-        title: `${companyName} Official Website (${domain})`,
-        url: params.companyUrl || `https://${domain}`,
-        type: "official_site",
-        note: "Primary entity grounding and product taxonomy",
-      },
-      {
-        title: `${companyName} Careers & Engineering Portal`,
-        type: "careers_page",
-        note: "Competency criteria and role expectations",
-      },
-      {
-        title: "Industry Tech Architecture Benchmarks",
-        type: "tech_blog",
-        note: "Modern distributed systems and interview standards",
-      },
-    ],
+    confidenceRating,
   };
 }

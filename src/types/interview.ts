@@ -6,6 +6,13 @@ export type QuestionCategory = "company" | "role" | "hr";
 
 export type CertaintyLevel = "verified" | "high_confidence" | "inferred";
 
+export type FallbackReason =
+  | "MISSING_API_KEY"
+  | "INVALID_API_KEY"
+  | "QUOTA_EXCEEDED"
+  | "API_ERROR"
+  | "NONE";
+
 export interface SourceCitation {
   title: string;
   url?: string;
@@ -89,6 +96,8 @@ export interface ResearchReport {
     explanation: string;
   };
   sourcesCited: SourceCitation[];
+  fallbackReason?: FallbackReason;
+  fallbackMessage?: string;
 }
 
 export interface ResearchRequest {
@@ -104,5 +113,6 @@ export interface ApiResponse<T = unknown> {
   error?: string;
   details?: unknown;
   isMockFallback?: boolean;
+  fallbackReason?: FallbackReason;
   message?: string;
 }

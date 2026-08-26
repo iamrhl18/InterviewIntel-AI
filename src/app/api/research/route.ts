@@ -62,7 +62,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<ApiResponse<R
     }
 
     // Step 2: Generate intelligence report using Gemini LLM engine with grounding
-    const { report, isMockFallback } = await generateInterviewIntelligence(
+    const { report, isMockFallback, fallbackReason } = await generateInterviewIntelligence(
       requestParams,
       scrapedData
     );
@@ -71,8 +71,9 @@ export async function POST(req: NextRequest): Promise<NextResponse<ApiResponse<R
       success: true,
       data: report,
       isMockFallback,
+      fallbackReason,
       message: isMockFallback
-        ? "Report generated in Demo Mode. Add GEMINI_API_KEY to your .env.local file to enable live AI web synthesis."
+        ? report.fallbackMessage || "Report generated in offline reference mode."
         : "Live AI intelligence report generated successfully.",
     });
   } catch (error: unknown) {

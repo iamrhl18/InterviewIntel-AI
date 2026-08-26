@@ -201,10 +201,12 @@ export const ReportDashboard: React.FC<ReportDashboardProps> = ({
 
   return (
     <div className="w-full space-y-5">
-      {/* Demo Mode Notice */}
+      {/* Demo / Offline Mode Notice */}
       {isMockFallback && (
         <div className="rounded border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800">
-          <span className="font-semibold">Notice:</span> Viewing built-in offline reference data for {report.companyName}. Add <code className="font-mono text-amber-900">GEMINI_API_KEY</code> in <code className="font-mono text-amber-900">.env.local</code> to enable real-time scraping for any company.
+          <span className="font-semibold">Notice:</span>{" "}
+          {report.fallbackMessage ||
+            `Viewing offline reference data for ${report.companyName}. Add GEMINI_API_KEY in .env.local to enable real-time Gemini AI web synthesis.`}
         </div>
       )}
 
