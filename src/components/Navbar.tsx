@@ -1,13 +1,22 @@
 "use client";
 
 import React from "react";
-import { Sparkles, History, Compass, FileText, CheckCircle2, ShieldCheck, KeyRound } from "lucide-react";
+import {
+  Layers,
+  History,
+  Search,
+  BookOpen,
+  CheckCircle2,
+  FileCheck,
+  Plus,
+} from "lucide-react";
 
 interface NavbarProps {
   historyCount: number;
   onOpenHistory: () => void;
   onReset: () => void;
   isMockFallback?: boolean;
+  onNavigateSection?: (section: "research" | "prep" | "mock") => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -15,72 +24,112 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenHistory,
   onReset,
   isMockFallback = false,
+  onNavigateSection,
 }) => {
+  const handleNavClick = (section: "research" | "prep" | "mock") => {
+    if (onNavigateSection) {
+      onNavigateSection(section);
+    } else {
+      if (section === "research") {
+        onReset();
+      } else {
+        const el = document.getElementById(
+          section === "prep" ? "report-container" : "section-mock-interview"
+        );
+        el?.scrollIntoView({ behavior: "smooth" });
+      }
+    }
+  };
+
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-slate-200/80 bg-white/85 backdrop-blur-md dark:border-slate-800/80 dark:bg-slate-950/85">
+    <header className="sticky top-0 z-40 w-full border-b border-slate-200 bg-white/95 backdrop-blur-xs">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
-        {/* Brand */}
+        {/* Left: Brand */}
         <div
           onClick={onReset}
-          className="group flex cursor-pointer items-center gap-3 transition-transform hover:scale-[1.01]"
+          className="flex cursor-pointer items-center gap-2.5 transition-opacity hover:opacity-90"
         >
-          <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-violet-500 shadow-md shadow-indigo-500/20 ring-1 ring-white/20">
-            <Sparkles className="h-5 w-5 text-white animate-pulse" />
+          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-blue-600 text-white shadow-xs">
+            <Layers className="h-4 w-4 stroke-[2.2]" />
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-lg font-bold tracking-tight text-slate-900 dark:text-white">
-                InterviewIntel<span className="text-indigo-600 dark:text-indigo-400"> AI</span>
-              </span>
-              <span className="inline-flex items-center rounded-md bg-indigo-50 px-1.5 py-0.5 text-xs font-semibold text-indigo-700 ring-1 ring-inset ring-indigo-700/10 dark:bg-indigo-950/60 dark:text-indigo-300 dark:ring-indigo-800">
-                v1.0 MVP
-              </span>
-            </div>
-            <p className="hidden text-xs text-slate-500 sm:block dark:text-slate-400">
-              Corporate Intelligence & Targeted Interview Engine
-            </p>
+          <div className="flex items-center gap-2">
+            <span className="text-base font-semibold tracking-tight text-slate-900">
+              InterviewIntel
+            </span>
+            <span className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[11px] font-medium text-slate-600">
+              v1.0
+            </span>
           </div>
         </div>
 
-        {/* Right Actions */}
-        <div className="flex items-center gap-2.5 sm:gap-4">
-          {/* Status Indicator */}
-          {isMockFallback ? (
-            <div className="hidden items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700 ring-1 ring-amber-600/20 md:flex dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-800/60">
-              <KeyRound className="h-3.5 w-3.5" />
-              <span>Demo Mode (Using Built-in Intel)</span>
-            </div>
-          ) : (
-            <div className="hidden items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 ring-1 ring-emerald-600/20 md:flex dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-800/60">
-              <ShieldCheck className="h-3.5 w-3.5" />
-              <span>Grounded Web & AI Engine Active</span>
-            </div>
-          )}
+        {/* Center / Right Nav Items */}
+        <div className="flex items-center gap-1 sm:gap-6">
+          <nav className="hidden md:flex items-center gap-1 text-sm font-medium text-slate-600">
+            <button
+              type="button"
+              onClick={() => handleNavClick("research")}
+              className="rounded-md px-3 py-1.5 transition-colors hover:bg-slate-50 hover:text-slate-900"
+            >
+              Company Research
+            </button>
+            <button
+              type="button"
+              onClick={() => handleNavClick("prep")}
+              className="rounded-md px-3 py-1.5 transition-colors hover:bg-slate-50 hover:text-slate-900"
+            >
+              Interview Prep
+            </button>
+            <button
+              type="button"
+              onClick={() => handleNavClick("mock")}
+              className="rounded-md px-3 py-1.5 transition-colors hover:bg-slate-50 hover:text-slate-900"
+            >
+              Mock Interview
+            </button>
+          </nav>
 
-          {/* History Button */}
-          <button
-            onClick={onOpenHistory}
-            type="button"
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-xs font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
-          >
-            <History className="h-4 w-4 text-slate-500 dark:text-slate-400" />
-            <span>Saved Intel</span>
-            {historyCount > 0 && (
-              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-100 text-[11px] font-bold text-indigo-700 dark:bg-indigo-900/60 dark:text-indigo-300">
-                {historyCount}
-              </span>
+          <div className="h-4 w-px bg-slate-200 hidden md:block" />
+
+          {/* Right Action Buttons */}
+          <div className="flex items-center gap-2">
+            {/* Status indicator (subtle) */}
+            {isMockFallback ? (
+              <div className="hidden lg:flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                <span>Demo Intel Active</span>
+              </div>
+            ) : (
+              <div className="hidden lg:flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-800">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                <span>Live Grounding Active</span>
+              </div>
             )}
-          </button>
 
-          {/* New Search */}
-          <button
-            onClick={onReset}
-            type="button"
-            className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-medium text-white shadow-sm transition hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
-          >
-            <Sparkles className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">New Research</span>
-          </button>
+            {/* Saved Reports Drawer Trigger */}
+            <button
+              onClick={onOpenHistory}
+              type="button"
+              className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-xs transition hover:bg-slate-50 hover:text-slate-900"
+            >
+              <History className="h-3.5 w-3.5 text-slate-500" />
+              <span>Saved Reports</span>
+              {historyCount > 0 && (
+                <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-slate-100 px-1 text-[10px] font-semibold text-slate-700">
+                  {historyCount}
+                </span>
+              )}
+            </button>
+
+            {/* Primary Action / New Search */}
+            <button
+              onClick={onReset}
+              type="button"
+              className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white shadow-xs transition hover:bg-blue-700"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">New Research</span>
+            </button>
+          </div>
         </div>
       </div>
     </header>

@@ -9,10 +9,6 @@ import {
   Copy,
   Check,
   Target,
-  Sparkles,
-  HelpCircle,
-  Award,
-  Layers,
   Lightbulb,
 } from "lucide-react";
 import { InterviewQuestion } from "@/types/interview";
@@ -31,14 +27,14 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
   isPracticed,
   onTogglePracticed,
 }) => {
-  const [isExpanded, setIsExpanded] = useState(true);
+  const [isExpanded, setIsExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const priorityStyle = getPriorityColor(question.priority);
 
   const handleCopy = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const textToCopy = `Question: ${question.question}\n\nPriority: ${question.priority}\n\nContext: ${question.context}\n\nWhat They're Testing: ${question.whatInterviewerIsTesting.join(", ")}\n\nTalking Points:\n${question.sampleTalkingPoints.map((tp) => `- ${tp}`).join("\n")}`;
+    const textToCopy = `Question: ${question.question}\nPriority: ${question.priority}\nCategory: ${question.category}\nContext: ${question.context}\nTesting: ${question.whatInterviewerIsTesting.join(", ")}\nTalking Points:\n${question.sampleTalkingPoints.map((tp) => `- ${tp}`).join("\n")}`;
     navigator.clipboard.writeText(textToCopy);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -46,62 +42,62 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
 
   return (
     <div
-      className={`group relative overflow-hidden rounded-xl border transition-all duration-200 ${
+      className={`overflow-hidden rounded-md border transition-colors ${
         isPracticed
-          ? "border-emerald-200 bg-emerald-50/20 dark:border-emerald-900/40 dark:bg-emerald-950/15"
-          : "border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:hover:border-slate-700"
+          ? "border-emerald-200 bg-emerald-50/20"
+          : "border-slate-200 bg-white hover:border-slate-300"
       }`}
     >
-      {/* Top Header */}
-      <div className="flex items-start justify-between gap-3 p-4 sm:p-5">
-        <div className="flex items-start gap-3.5 flex-1">
-          {/* Practiced Checkbox Button */}
+      {/* Question Header Bar */}
+      <div className="flex items-start justify-between gap-3 p-4">
+        <div className="flex items-start gap-3 flex-1">
+          {/* Practiced Toggle */}
           <button
             type="button"
             onClick={() => onTogglePracticed(question.id)}
             title={isPracticed ? "Mark as unpracticed" : "Mark as practiced"}
-            className="mt-0.5 shrink-0 transition-transform active:scale-90"
+            className="mt-0.5 shrink-0 text-slate-400 hover:text-slate-600 transition-colors"
           >
             {isPracticed ? (
-              <CheckCircle2 className="h-5 w-5 text-emerald-500 fill-emerald-100 dark:fill-emerald-950" />
+              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
             ) : (
-              <Circle className="h-5 w-5 text-slate-300 hover:text-indigo-500 dark:text-slate-600 dark:hover:text-indigo-400" />
+              <Circle className="h-4 w-4 text-slate-300 hover:text-blue-600" />
             )}
           </button>
 
-          {/* Question title & badges */}
-          <div className="flex-1 space-y-2">
+          {/* Details */}
+          <div className="flex-1 space-y-1.5">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs font-bold text-slate-400 dark:text-slate-500">
-                Q{index + 1}
+              <span className="font-mono text-xs font-semibold text-slate-400">
+                #{String(index + 1).padStart(2, "0")}
               </span>
 
               {/* Priority Badge */}
               <span
-                className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${priorityStyle.badge}`}
+                className={`inline-flex items-center gap-1.5 rounded border px-2 py-0.5 text-[11px] font-medium ${priorityStyle.badge}`}
               >
                 <span className={`h-1.5 w-1.5 rounded-full ${priorityStyle.dot}`} />
-                {question.priority} PRIORITY
+                {question.priority}
               </span>
 
               {/* Category */}
-              <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+              <span className="rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium uppercase text-slate-600">
                 {question.category}
               </span>
 
               {question.suggestedFramework && (
-                <span className="hidden sm:inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-0.5 text-[11px] font-medium text-indigo-700 ring-1 ring-inset ring-indigo-700/10 dark:bg-indigo-950/40 dark:text-indigo-300 dark:ring-indigo-800/40">
-                  <Award className="h-3 w-3" />
+                <span className="hidden sm:inline-flex rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-600">
                   {question.suggestedFramework}
                 </span>
               )}
             </div>
 
             <h4
-              className={`text-base font-semibold leading-snug tracking-tight ${
+              onClick={() => setIsExpanded(!isExpanded)}
+              className={`cursor-pointer text-sm font-medium leading-relaxed ${
                 isPracticed
-                  ? "text-slate-700 line-through decoration-emerald-500/50 dark:text-slate-300"
-                  : "text-slate-900 dark:text-white"
+                  ? "text-slate-600 line-through decoration-slate-300"
+                  : "text-slate-900 hover:text-blue-600"
               }`}
             >
               {question.question}
@@ -109,30 +105,30 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
           </div>
         </div>
 
-        {/* Action icons */}
+        {/* Actions */}
         <div className="flex items-center gap-1 shrink-0">
           <button
             type="button"
             onClick={handleCopy}
-            title="Copy question and talking points"
-            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+            title="Copy question and points"
+            className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors"
           >
             {copied ? (
-              <Check className="h-4 w-4 text-emerald-500" />
+              <Check className="h-3.5 w-3.5 text-emerald-600" />
             ) : (
-              <Copy className="h-4 w-4" />
+              <Copy className="h-3.5 w-3.5" />
             )}
           </button>
           <button
             type="button"
             onClick={() => setIsExpanded(!isExpanded)}
-            title={isExpanded ? "Collapse" : "Expand details"}
-            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+            title={isExpanded ? "Collapse" : "Expand answer strategy"}
+            className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors"
           >
             {isExpanded ? (
-              <ChevronUp className="h-4 w-4" />
+              <ChevronUp className="h-3.5 w-3.5" />
             ) : (
-              <ChevronDown className="h-4 w-4" />
+              <ChevronDown className="h-3.5 w-3.5" />
             )}
           </button>
         </div>
@@ -140,12 +136,12 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
 
       {/* Expanded Breakdown */}
       {isExpanded && (
-        <div className="border-t border-slate-100 bg-slate-50/50 px-5 py-4 text-xs space-y-3 dark:border-slate-800 dark:bg-slate-950/40">
+        <div className="border-t border-slate-100 bg-slate-50/50 p-4 text-xs space-y-3">
           {/* Priority rationale */}
           {question.priorityRationale && (
-            <div className="flex items-start gap-2 text-slate-600 dark:text-slate-300">
-              <span className="font-semibold text-slate-900 shrink-0 dark:text-white">
-                Why this matters:
+            <div className="text-slate-600">
+              <span className="font-semibold text-slate-900 mr-1.5">
+                Why this question is asked:
               </span>
               <span>{question.priorityRationale}</span>
             </div>
@@ -153,8 +149,8 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
 
           {/* Context */}
           {question.context && (
-            <div className="flex items-start gap-2 text-slate-600 dark:text-slate-300">
-              <span className="font-semibold text-slate-900 shrink-0 dark:text-white">
+            <div className="text-slate-600">
+              <span className="font-semibold text-slate-900 mr-1.5">
                 Context & Angle:
               </span>
               <span>{question.context}</span>
@@ -163,16 +159,16 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
 
           {/* What they are testing */}
           {question.whatInterviewerIsTesting && question.whatInterviewerIsTesting.length > 0 && (
-            <div className="space-y-1.5">
-              <span className="font-semibold text-slate-900 dark:text-white flex items-center gap-1.5">
-                <Target className="h-3.5 w-3.5 text-indigo-500" />
-                What the Interviewer Is Testing:
+            <div className="space-y-1">
+              <span className="font-semibold text-slate-900 flex items-center gap-1">
+                <Target className="h-3.5 w-3.5 text-slate-500" />
+                Assessment Criteria:
               </span>
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex flex-wrap gap-1.5 pt-0.5">
                 {question.whatInterviewerIsTesting.map((item, idx) => (
                   <span
                     key={idx}
-                    className="inline-flex items-center rounded-md bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700 shadow-2xs border border-slate-200/80 dark:bg-slate-900 dark:text-slate-300 dark:border-slate-800"
+                    className="inline-flex rounded border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-700"
                   >
                     {item}
                   </span>
@@ -183,12 +179,12 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
 
           {/* Sample Talking Points */}
           {question.sampleTalkingPoints && question.sampleTalkingPoints.length > 0 && (
-            <div className="space-y-1.5 rounded-lg border border-indigo-100 bg-indigo-50/40 p-3 dark:border-indigo-950/60 dark:bg-indigo-950/20">
-              <span className="font-semibold text-indigo-950 dark:text-indigo-300 flex items-center gap-1.5">
-                <Lightbulb className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
-                Recommended Talking Points & Strategy:
+            <div className="space-y-1.5 rounded-md border border-slate-200 bg-white p-3">
+              <span className="font-semibold text-slate-900 flex items-center gap-1.5">
+                <Lightbulb className="h-3.5 w-3.5 text-blue-600" />
+                Recommended Response Strategy & Talking Points:
               </span>
-              <ul className="space-y-1 text-slate-700 dark:text-slate-300 list-disc list-inside">
+              <ul className="space-y-1 text-slate-700 list-disc list-inside">
                 {question.sampleTalkingPoints.map((point, idx) => (
                   <li key={idx} className="leading-relaxed">
                     {point}
@@ -198,10 +194,10 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
             </div>
           )}
 
-          {/* Experience fit notes if available */}
+          {/* Experience fit notes */}
           {question.experienceFitNotes && (
-            <div className="text-[11px] text-slate-400 dark:text-slate-500 italic">
-              Level calibration: {question.experienceFitNotes}
+            <div className="text-[11px] text-slate-500">
+              Calibrated for: {question.experienceFitNotes}
             </div>
           )}
         </div>
